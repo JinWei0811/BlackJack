@@ -125,13 +125,22 @@ public class BlackJackHandler implements WebSocketHandler {
             }
 
             if (connected.getMethod().equals(hit)) {
-
+                Thread thread = new Thread(() -> {
+                    try {
+                        playerHit(session, connected);
+                        allStateCheck(findRoomByRoomId(connected.getRoomId()));
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+                thread.start();
             }
 
             if (connected.getMethod().equals(skip)) {
                 Thread thread = new Thread(() -> {
                     try {
                         playerSkip(session, connected);
+                        allStateCheck(findRoomByRoomId(connected.getRoomId()));
                     } catch (Exception e) {
                         throw new RuntimeException(e);
                     }
@@ -229,14 +238,20 @@ public class BlackJackHandler implements WebSocketHandler {
         return createConnectedResp(currentRoom, content);
     }
 
-    private ConnectedRespModel playerHit(WebSocketSession session, ConnectedModel connected) {
-        return null;
+    private void playerHit(WebSocketSession session, ConnectedModel connected) throws Exception {
+        RoomModel room = findRoomByRoomId(connected.getRoomId());
+        PlayerModel playerInfo = findPlayerInfoBySessionId(room.getPlayerList(), session.getId());
+        CardModel card = room.getDeck().remove(0);
+        List<CardModel> playerHand = playerInfo.getHand();
+        playerHand.add(card);
+        playerInfo.setHand(playerHand);
+        playerInfo.setPoint(calculateHandPoints(playerInfo.getHand()));
+        playerInfo.setState(calculateHandBrodcast(playerInfo, room));
     }
 
     private void playerSkip(WebSocketSession session, ConnectedModel connected) throws Exception {
         RoomModel room = findRoomByRoomId(connected.getRoomId());
-        List<PlayerModel> playerList = room.getPlayerList();
-        PlayerModel newPlayerInfo = findPlayerInfoBySessionId(playerList, session.getId());
+        PlayerModel newPlayerInfo = findPlayerInfoBySessionId(room.getPlayerList(), session.getId());
         newPlayerInfo.setState(skip);
         brodcastToPlayers(convertModelToJsonString(getPlayerCard(newPlayerInfo, skip)), room);
     }
@@ -441,14 +456,14 @@ public class BlackJackHandler implements WebSocketHandler {
             }
             brodcastToPlayers(convertModelToJsonString(getPlayerCard(player, state)), room);
         } else {
-            state = hit;
+            state = continu;
             brodcastToPlayers(convertModelToJsonString(getPlayerCard(player, state)), room);
         }
         return state;
     }
 
     private void allStateCheck(RoomModel room) throws Exception {
-        Boolean isPlayersSkip = room.getPlayerList().stream().filter(v -> v.getState().equals(continu)).findFirst().orElse(null) == null ? true : false;
+        Boolean isPlayersSkip = room.getPlayerList().stream().filter(v -> !v.getName().equals("bot") && v.getState().equals(continu)).findFirst().orElse(null) == null ? true : false;
         if (isPlayersSkip) {
             PlayerModel botPlayer = room.getPlayerList().stream().filter(v -> v.getSessionId().equals("bot")).findFirst().orElse(null);
             if (botPlayer != null) {
@@ -463,7 +478,9 @@ public class BlackJackHandler implements WebSocketHandler {
 
                 if (botPlayer.getState().equals(continu) && botPlayer.getPoint() > 16) {
                     botPlayer.setState(skip);
-                    brodcastToPlayers(convertModelToJsonString(getPlayerCard(botPlayer, skip)), room);
+                    List<GameResultModel> gameResults = createGameResult(room, botPlayer);
+                    brodcastToPlayers(convertModelToJsonString(gameResults), room);
+//                    brodcastToPlayers(convertModelToJsonString(getPlayerCard(botPlayer, skip)), room);
                 }
 
                 if (botPlayer.getState().equals(skip)) {
@@ -482,6 +499,9 @@ public class BlackJackHandler implements WebSocketHandler {
     private List<GameResultModel> createGameResult(RoomModel room, PlayerModel botPlayer) {
         List<GameResultModel> gameResults = new ArrayList<>();
         for (PlayerModel player : room.getPlayerList()) {
+            if (player.getName().equals("bot")) {
+                continue;
+            }
             if (botPlayer.getState().equals(lose)) {
                 if (!player.getState().equals(lose)) {
                     gameResults.add(generateGameResult(player, room.getRoomId(), win));
