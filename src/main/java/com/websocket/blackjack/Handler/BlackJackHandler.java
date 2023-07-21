@@ -67,9 +67,24 @@ public class BlackJackHandler implements WebSocketHandler {
     private String playerCard;
     @Value("${model.response}")
     private String response;
+    @Value("${response.connect}")
+    private String response_connect;
+    @Value("${response.create}")
+    private String response_create;
+    @Value("${response.join}")
+    private String response_join;
+    @Value("${response.leave}")
+    private String response_leave;
+    @Value("${response.ready}")
+    private String response_ready;
+    @Value("${response.notready}")
+    private String response_notready;
+    @Value("${response.start}")
+    private String response_start;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+        session.sendMessage(new TextMessage(convertModelToJsonString(createConnectedResp(null, "連線成功", response_connect))));
         logger.debug(String.format("%s Room Connection Established", session.getId()));
     }
 
@@ -178,19 +193,19 @@ public class BlackJackHandler implements WebSocketHandler {
 
         RoomModel roomModel = createRoomModel(newRoomId, waiting, playerModelList);
         roomList.add(roomModel);
-        return createConnectedResp(roomModel, "創建房間成功");
+        return createConnectedResp(roomModel, "創建房間成功", response_create);
     }
 
     private ConnectedRespModel joinRoom(WebSocketSession session, ConnectedModel connected) {
         RoomModel currentRoom = findRoomByRoomId(connected.getRoomId());
         if (currentRoom == null) {
-            return createConnectedResp(null, "查無此房間");
+            return createConnectedResp(null, "查無此房間", response_join);
         }
         if (currentRoom.getPlayerList().size() > 4) {
-            return createConnectedResp(null, "人數已滿，無法加入房間");
+            return createConnectedResp(null, "人數已滿，無法加入房間", response_join);
         }
         if (currentRoom.getRoomState().equals(playing)) {
-            return createConnectedResp(null, "遊戲進行中，無法加入房間");
+            return createConnectedResp(null, "遊戲進行中，無法加入房間", response_join);
         }
 
         PlayerModel newPlayer = createPlayer(session, connected.getName(), not_ready);
@@ -198,7 +213,7 @@ public class BlackJackHandler implements WebSocketHandler {
         playerList.add(newPlayer);
         currentRoom.setPlayerList(playerList);
         String content = connected.getName() + " 加入房間";
-        return createConnectedResp(currentRoom, content);
+        return createConnectedResp(currentRoom, content, response_join);
     }
 
     private ConnectedRespModel leaveRoom(WebSocketSession session, ConnectedModel connected) {
@@ -215,11 +230,11 @@ public class BlackJackHandler implements WebSocketHandler {
         if (newPlayerList.size() == 0) {
             roomList.remove(currentRoom);
             String content = connected.getName() + " 離開房間";
-            return createConnectedResp(null, content);
+            return createConnectedResp(null, content, response_join);
         }
         currentRoom.setPlayerList(newPlayerList);
         String content = connected.getName() + " 離開房間";
-        return createConnectedResp(currentRoom, content);
+        return createConnectedResp(currentRoom, content, response_join);
     }
 
     private ConnectedRespModel playerReadyOrNotReady(WebSocketSession session, ConnectedModel connected, String state) {
@@ -235,7 +250,7 @@ public class BlackJackHandler implements WebSocketHandler {
             newPlayerInfo.setState(not_ready);
             content += "已取消準備";
         }
-        return createConnectedResp(currentRoom, content);
+        return createConnectedResp(currentRoom, content, state == ready ? response_ready : response_notready);
     }
 
     private void playerHit(WebSocketSession session, ConnectedModel connected) throws Exception {
@@ -268,7 +283,7 @@ public class BlackJackHandler implements WebSocketHandler {
             boolean isAllReady2 = checkPlayersReady(currentRoom.getPlayerList());
             if (isAllReady1 && isAllReady2) {
                 currentRoom.getPlayerList().stream().forEach(v -> v.setState(continu));
-                ConnectedRespModel connectedResp = createConnectedResp(currentRoom, "遊戲開始");
+                ConnectedRespModel connectedResp = createConnectedResp(currentRoom, "遊戲開始", response_start);
                 brodcastToPlayers(convertModelToJsonString(connectedResp), currentRoom);
                 gameStart(currentRoom);
             }
@@ -329,15 +344,16 @@ public class BlackJackHandler implements WebSocketHandler {
         return roomModel;
     }
 
-    private ConnectedRespModel createConnectedResp(RoomModel roomModel, String content) {
+    private ConnectedRespModel createConnectedResp(RoomModel roomModel, String content, String response_method) {
         ConnectedRespModel.ConnectedRespModelBuilder connectedRespModel = ConnectedRespModel.builder();
         if (roomModel == null) {
             connectedRespModel.content(content);
+            connectedRespModel.method(response_method);
         } else {
             List<String> playerList = roomModel.getPlayerList().stream().map(v -> v.getName()).toList();
             List<String> playerStateList = roomModel.getPlayerList().stream().map(v -> v.getState()).toList();
             connectedRespModel
-                    .method(response)
+                    .method(response_method)
                     .roomId(roomModel.getRoomId())
                     .playerList(playerList)
                     .playerStateList(playerStateList)
