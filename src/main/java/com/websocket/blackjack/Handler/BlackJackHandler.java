@@ -242,15 +242,15 @@ public class BlackJackHandler implements WebSocketHandler {
         List<PlayerModel> playerList = currentRoom.getPlayerList();
         PlayerModel newPlayerInfo = findPlayerInfoBySessionId(playerList, session.getId());
         String content = connected.getName();
-        if (state == ready) {
+        if (state.equals(ready)) {
             newPlayerInfo.setState(ready);
             content += "已準備就緒";
         }
-        if (state == not_ready) {
+        if (state.equals(not_ready)) {
             newPlayerInfo.setState(not_ready);
             content += "已取消準備";
         }
-        return createConnectedResp(currentRoom, content, state == ready ? response_ready : response_notready);
+        return createConnectedResp(currentRoom, content, state.equals(ready) ? response_ready : response_notready);
     }
 
     private void playerHit(WebSocketSession session, ConnectedModel connected) throws Exception {
@@ -327,7 +327,7 @@ public class BlackJackHandler implements WebSocketHandler {
 
     private PlayerModel createPlayer(WebSocketSession session, String name, String state) {
         PlayerModel playerModel = PlayerModel.builder()
-                .sessionId(name == "bot" ? "bot" : session.getId())
+                .sessionId("bot".equals(name) ? "bot" : session.getId())
                 .session(session)
                 .name(name)
                 .state(state)
@@ -382,7 +382,7 @@ public class BlackJackHandler implements WebSocketHandler {
         TextMessage textMessage = new TextMessage(text);
         if (roomModel != null) {
             for (var player : roomModel.getPlayerList()) {
-                if (player.getSessionId() != "bot") {
+                if (!"bot".equals(player.getSessionId())) {
                     player.getSession().sendMessage(textMessage);
                 }
             }
